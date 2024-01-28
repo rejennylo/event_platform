@@ -6,38 +6,39 @@ import { clerkClient } from '@clerk/nextjs';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
-  // You can find this in the Clerk Dashboard -> Webhooks -> choose the webhook
+  // 從環境變數中讀取 webhook 密鑰
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
+  // 檢查密鑰是否存在，不存在就拋出錯誤
   if (!WEBHOOK_SECRET) {
     throw new Error(
       'Please add WEBHOOK_SECRET from Clerk Dashboard to .env or .env.local'
     );
   }
 
-  // Get the headers
+  // 從請求中獲取 HTTP headers
   const headerPayload = headers();
   const svix_id = headerPayload.get('svix-id');
   const svix_timestamp = headerPayload.get('svix-timestamp');
   const svix_signature = headerPayload.get('svix-signature');
 
-  // If there are no headers, error out
+  // 如果其中一個 header 不存在，返回 400 狀態碼
   if (!svix_id || !svix_timestamp || !svix_signature) {
     return new Response('Error occured -- no svix headers', {
       status: 400,
     });
   }
 
-  // Get the body
+  // 從請求中讀取並解析主體
   const payload = await req.json();
   const body = JSON.stringify(payload);
 
-  // Create a new Svix instance with your secret.
+  // 使用密鑰創建一個 Svix Webhook 實例
   const wh = new Webhook(WEBHOOK_SECRET);
 
   let evt: WebhookEvent;
 
-  // Verify the payload with the headers
+  // 驗證 Webhook 請求的有效性
   try {
     evt = wh.verify(body, {
       'svix-id': svix_id,
@@ -51,12 +52,14 @@ export async function POST(req: Request) {
     });
   }
 
-  // Get the ID and type
+  // 取得 ID 和 type
   const { id } = evt.data;
   const eventType = evt.type;
 
-  if(eventType === 'user.created') {
-    const { id, email_addresses, image_url, first_name, last_name, username } = evt.data;
+  // 處理用戶創建事件
+  if (eventType === 'user.created') {
+    const { id, email_addresses, image_url, first_name, last_name, username } =
+      evt.data;
 
     const user = {
       clerkId: id,
@@ -65,10 +68,12 @@ export async function POST(req: Request) {
       firstName: first_name,
       lastName: last_name,
       photo: image_url,
-    }
+    };
 
+    // 創建新用戶
     const newUser = await createUser(user);
 
+    // 如果用戶創建成功，則更新 Clerk 中的用戶元數據
     if (newUser) {
       await clerkClient.users.updateUserMetadata(id, {
         publicMetadata: {
@@ -77,12 +82,14 @@ export async function POST(req: Request) {
       });
     }
 
+    // 返回 JSON 響應
     return NextResponse.json({ message: 'OK', user: newUser });
   }
 
   if (eventType === 'user.updated') {
     const { id, image_url, first_name, last_name, username } = evt.data;
 
+    // 處理用戶更新事件
     const user = {
       firstName: first_name,
       lastName: last_name,
@@ -90,11 +97,13 @@ export async function POST(req: Request) {
       photo: image_url,
     };
 
+    // 更新用戶資訊
     const updatedUser = await updateUser(id, user);
 
     return NextResponse.json({ message: 'OK', user: updatedUser });
   }
 
+  // 處理用戶刪除事件
   if (eventType === 'user.deleted') {
     const { id } = evt.data;
 
@@ -103,5 +112,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: 'OK', user: deletedUser });
   }
 
+  // 如果事件類型不匹配，則返回一個空的 200 OK 響應
   return new Response('', { status: 200 });
 }

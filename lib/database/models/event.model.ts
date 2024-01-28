@@ -1,5 +1,6 @@
 import { Document, Schema, model, models } from 'mongoose';
 
+// interface 繼承了 mongoose Document 的結構（屬性與方法）並額外定義屬性
 export interface IEvent extends Document {
   _id: string;
   title: string;
