@@ -7,7 +7,7 @@ import { formUrlQuery } from '@/lib/utils';
 type PaginationProps = {
   page: number | string;
   totalPages: number;
-  urlParamName: string;
+  urlParamName?: string;
 };
 
 const Pagination = ({ page, totalPages, urlParamName }: PaginationProps) => {
